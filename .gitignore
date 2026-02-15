@@ -54,5 +54,18 @@ Thumbs.db
 # Database
 *.db
 *.sqlite3
+.dmap/db-data/
+.dmap/config/database.yaml
 
-# NOTE: DO NOT exclude output/ directory - it contains generated newsletters
+# Docker
+docker-compose.override.yml
+
+# Verification script (temporary)
+verify-setup.py
+
+# OMC plugin state
+.omc/
+
+# Output artifacts (keep directory via .gitkeep)
+output/*
+!output/.gitkeep

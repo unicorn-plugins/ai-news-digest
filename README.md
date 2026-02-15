@@ -168,7 +168,6 @@ crontab -l
 
 | 에이전트 | 티어 | 역할 |
 |----------|------|------|
-| orchestrator | HIGH | 전체 워크플로우 조율, 에러 처리, 재시도 로직 관리 |
 | collector | MEDIUM | RSS 피드 수집 및 파싱, 24시간 필터링 |
 | content-processor | MEDIUM | 중복 검사, Groq API 요약, 한국어 번역 |
 | data-manager | LOW | PostgreSQL CRUD 연산, 데이터 저장 및 조회 |
@@ -243,10 +242,6 @@ ai-news-digest/
 │   └── remove-ext-skill/
 │       └── SKILL.md
 ├── agents/
-│   ├── orchestrator/
-│   │   ├── AGENT.md
-│   │   ├── agentcard.yaml
-│   │   └── tools.yaml
 │   ├── collector/
 │   │   ├── AGENT.md
 │   │   ├── agentcard.yaml

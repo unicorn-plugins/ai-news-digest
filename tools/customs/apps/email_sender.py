@@ -25,8 +25,8 @@ def load_smtp_config(config_path: str = ".dmap/secrets/gmail.yaml") -> Dict[str,
         return {
             'smtp_server': config.get('smtp_server', 'smtp.gmail.com'),
             'smtp_port': config.get('smtp_port', 587),
-            'username': config['username'],
-            'password': config['password']
+            'username': config.get('username', config.get('email')),
+            'password': config.get('password', config.get('app_password'))
         }
     except FileNotFoundError:
         print(f"Error: Gmail SMTP 설정 파일을 찾을 수 없습니다: {config_path}", file=sys.stderr)
@@ -123,7 +123,12 @@ def send_email(
 def send_newsletter(newsletter_html: str, issue_date: str) -> Dict[str, any]:
     """뉴스레터 발송"""
     recipients_config = load_recipients()
-    recipients = [r['email'] for r in recipients_config['recipients']]
+    # Handle both list of strings and list of dicts
+    recipients_list = recipients_config['recipients']
+    if recipients_list and isinstance(recipients_list[0], str):
+        recipients = recipients_list
+    else:
+        recipients = [r['email'] for r in recipients_list]
 
     subject = f"AI 뉴스 다이제스트 - {issue_date}"
     body_text = f"AI 뉴스 다이제스트 {issue_date} 이슈입니다. HTML 지원 이메일 클라이언트에서 확인해주세요."

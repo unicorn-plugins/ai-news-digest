@@ -52,18 +52,19 @@ def summarize_and_translate(content: str, api_key: str, model: str = "llama-3.1-
 
     # 프롬프트 작성
     system_prompt = """You are a professional AI news summarizer and translator. Your task is to:
-1. Summarize the given English news article into 3-4 concise sentences
-2. Translate the summary into natural, fluent Korean
-3. Focus on the key points: what happened, why it's important, and potential impact
-4. Use formal but accessible Korean language suitable for a tech-savvy audience"""
+1. Summarize the given English news article into 4-6 detailed sentences (80-120 words)
+2. Translate the summary into natural, fluent Korean (at least 4-5 sentences)
+3. Focus on: what happened, why it's important, context/background, and potential impact
+4. Use formal but accessible Korean language suitable for a tech-savvy audience
+5. Ensure Korean translation is comprehensive and informative, not just a brief overview"""
 
     user_prompt = f"""Please summarize and translate this AI/tech news article:
 
 {content}
 
 Response format:
-- First provide a 3-4 sentence English summary
-- Then provide a Korean translation of the summary"""
+- First provide a 4-6 sentence English summary (80-120 words)
+- Then provide a detailed Korean translation (at least 4-5 sentences covering all key points)"""
 
     for attempt in range(max_retries):
         try:
@@ -74,7 +75,7 @@ Response format:
                 ],
                 model=model,
                 temperature=0.3,  # 일관된 요약을 위해 낮은 temperature
-                max_tokens=512,   # 3-4문장 요약에 충분한 토큰
+                max_tokens=800,   # 4-6문장 상세 요약을 위한 충분한 토큰
                 top_p=1,
                 stop=None,
                 stream=False
@@ -179,8 +180,130 @@ def extract_korean_summary(response: str) -> str:
         return response.split('\n')[-1].strip() if response else "요약을 생성할 수 없습니다."
 
 
-def process_news_items(items: List[Dict]) -> Dict[str, any]:
-    """뉴스 항목들을 배치 처리"""
+def summarize_and_translate_batch(items: List[Dict], api_key: str, model: str = "llama-3.1-8b-instant", chunk_size: int = 5, max_retries: int = 3) -> Dict[str, any]:
+    """
+    배치로 여러 뉴스를 한 번에 요약 및 번역 (토큰 절감)
+
+    Args:
+        items: 뉴스 항목 리스트
+        api_key: Groq API 키
+        model: 사용할 모델명
+        chunk_size: 한 번에 처리할 뉴스 개수 (기본 5개)
+        max_retries: 최대 재시도 횟수
+
+    Returns:
+        배치 처리 결과 딕셔너리
+    """
+    client = Groq(api_key=api_key)
+
+    system_prompt = """You are a professional AI news summarizer and translator. Your task is to:
+1. Summarize each given English news article into 4-6 detailed sentences (80-120 words)
+2. Translate each summary into natural, fluent Korean (at least 4-5 sentences)
+3. Focus on: what happened, why it's important, context/background, and potential impact
+4. Use formal but accessible Korean language suitable for a tech-savvy audience
+5. Ensure Korean translation is comprehensive and informative, not just a brief overview
+
+You will receive multiple articles numbered. For each article, provide:
+- A 4-6 sentence English summary (80-120 words)
+- A detailed Korean translation (at least 4-5 sentences)
+
+Format your response as:
+Article N:
+[Detailed Korean summary - 4-5 sentences minimum]
+
+---"""
+
+    combined_content = "\n\n".join([
+        f"Article {i+1}: {item.get('title', 'Untitled')}\n{item.get('content', '')[:1000]}"
+        for i, item in enumerate(items)
+    ])
+
+    user_prompt = f"""Please summarize and translate these {len(items)} AI/tech news articles:
+
+{combined_content}
+
+Provide detailed Korean summaries for each article (4-5 sentences minimum), separated by '---'."""
+
+    for attempt in range(max_retries):
+        try:
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model=model,
+                temperature=0.3,
+                max_tokens=800 * len(items),
+                top_p=1,
+                stop=None,
+                stream=False
+            )
+
+            response_content = chat_completion.choices[0].message.content
+
+            # 배치 응답 파싱 개선
+            summaries = []
+            raw_splits = response_content.split('---')
+
+            for s in raw_splits:
+                stripped = s.strip()
+                if stripped:
+                    # "Article N:" 헤더 제거
+                    lines = stripped.split('\n')
+                    clean_lines = [line for line in lines if not line.strip().startswith('Article')]
+                    summary_text = '\n'.join(clean_lines).strip()
+                    if summary_text:
+                        summaries.append(summary_text)
+
+            # 응답 개수가 요청 개수보다 적으면 경고
+            if len(summaries) < len(items):
+                print(f"경고: 응답 개수({len(summaries)})가 요청 개수({len(items)})보다 적습니다", file=sys.stderr)
+                print(f"원본 응답:\n{response_content[:500]}...", file=sys.stderr)
+
+            return {
+                "success": True,
+                "summaries": summaries,
+                "tokens_used": chat_completion.usage.total_tokens,
+                "model_used": model,
+                "chunk_size": len(items),
+                "attempt": attempt + 1
+            }
+
+        except groq.RateLimitError as e:
+            wait_time = 2 ** attempt
+            print(f"Rate limit exceeded, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
+            if attempt < max_retries - 1:
+                time.sleep(wait_time)
+                continue
+            else:
+                return {
+                    "success": False,
+                    "error": f"Rate limit exceeded after {max_retries} attempts",
+                    "error_type": "rate_limit"
+                }
+
+        except Exception as e:
+            wait_time = 2 ** attempt
+            print(f"Batch error, waiting {wait_time}s (attempt {attempt + 1}/{max_retries}): {e}", file=sys.stderr)
+            if attempt < max_retries - 1:
+                time.sleep(wait_time)
+                continue
+            else:
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "error_type": "unknown"
+                }
+
+    return {
+        "success": False,
+        "error": f"All {max_retries} attempts failed",
+        "error_type": "max_retries_exceeded"
+    }
+
+
+def process_news_items(items: List[Dict], use_batch: bool = True, batch_size: int = 5) -> Dict[str, any]:
+    """뉴스 항목들을 배치 또는 개별 처리"""
     config = load_groq_config()
 
     processed_items = []
@@ -189,41 +312,102 @@ def process_news_items(items: List[Dict]) -> Dict[str, any]:
     failed_count = 0
     total_tokens = 0
 
-    print(f"Groq API 요약 시작: {total_items}개 항목", file=sys.stderr)
+    print(f"Groq API 요약 시작: {total_items}개 항목 (배치 모드: {use_batch}, 배치 크기: {batch_size})", file=sys.stderr)
 
-    for i, item in enumerate(items):
-        print(f"처리 중: {i+1}/{total_items} - {item['title'][:50]}...", file=sys.stderr)
+    if use_batch and total_items > 1:
+        # 배치 처리 모드
+        for i in range(0, total_items, batch_size):
+            chunk = items[i:i+batch_size]
+            chunk_num = i // batch_size + 1
+            total_chunks = (total_items + batch_size - 1) // batch_size
 
-        # 요약 및 번역 수행
-        result = summarize_and_translate(
-            item.get('content', ''),
-            config['api_key'],
-            config['model']
-        )
+            print(f"배치 {chunk_num}/{total_chunks} 처리 중 ({len(chunk)}개 뉴스)...", file=sys.stderr)
 
-        # 원본 항목 복사 후 결과 추가
-        processed_item = item.copy()
+            batch_result = summarize_and_translate_batch(
+                chunk,
+                config['api_key'],
+                config['model'],
+                chunk_size=len(chunk)
+            )
 
-        if result['success']:
-            processed_item['summary_ko'] = result['summary_ko']
-            processed_item['summarized'] = True
-            processed_item['tokens_used'] = result.get('tokens_used', 0)
-            successful_count += 1
-            total_tokens += result.get('tokens_used', 0)
-            print(f"성공: {item['title'][:30]}... ({result.get('tokens_used', 0)} tokens)", file=sys.stderr)
-        else:
-            processed_item['summary_ko'] = item.get('content', '')[:500] + "..."  # 요약 실패 시 원문 일부 사용
-            processed_item['summarized'] = False
-            processed_item['summary_error'] = result['error']
-            processed_item['error_type'] = result.get('error_type', 'unknown')
-            failed_count += 1
-            print(f"실패: {item['title'][:30]}... - {result['error']}", file=sys.stderr)
+            if batch_result['success']:
+                summaries = batch_result['summaries']
+                tokens = batch_result['tokens_used']
+                total_tokens += tokens
 
-        processed_items.append(processed_item)
+                for j, item in enumerate(chunk):
+                    processed_item = item.copy()
+                    if j < len(summaries):
+                        processed_item['summary_ko'] = summaries[j]
+                        processed_item['summarized'] = True
+                        processed_item['tokens_used'] = tokens // len(chunk)
+                        successful_count += 1
+                    else:
+                        processed_item['summary_ko'] = item.get('content', '')[:500] + "..."
+                        processed_item['summarized'] = False
+                        processed_item['summary_error'] = "Summary not found in batch response"
+                        failed_count += 1
+                    processed_items.append(processed_item)
 
-        # 과도한 API 호출 방지를 위한 짧은 지연
-        if i < total_items - 1:  # 마지막이 아니면 대기
-            time.sleep(0.5)
+                print(f"배치 {chunk_num} 성공: {len(chunk)}개 처리, {tokens} 토큰 사용", file=sys.stderr)
+            else:
+                # 배치 실패 시 개별 처리로 폴백
+                print(f"배치 {chunk_num} 실패, 개별 처리로 전환: {batch_result.get('error', 'Unknown')}", file=sys.stderr)
+                for item in chunk:
+                    result = summarize_and_translate(
+                        item.get('content', ''),
+                        config['api_key'],
+                        config['model']
+                    )
+                    processed_item = item.copy()
+                    if result['success']:
+                        processed_item['summary_ko'] = result['summary_ko']
+                        processed_item['summarized'] = True
+                        processed_item['tokens_used'] = result.get('tokens_used', 0)
+                        successful_count += 1
+                        total_tokens += result.get('tokens_used', 0)
+                    else:
+                        processed_item['summary_ko'] = item.get('content', '')[:500] + "..."
+                        processed_item['summarized'] = False
+                        processed_item['summary_error'] = result['error']
+                        failed_count += 1
+                    processed_items.append(processed_item)
+
+            if i + batch_size < total_items:
+                time.sleep(1)
+
+    else:
+        # 개별 처리 모드 (기존 로직)
+        for i, item in enumerate(items):
+            print(f"처리 중: {i+1}/{total_items} - {item['title'][:50]}...", file=sys.stderr)
+
+            result = summarize_and_translate(
+                item.get('content', ''),
+                config['api_key'],
+                config['model']
+            )
+
+            processed_item = item.copy()
+
+            if result['success']:
+                processed_item['summary_ko'] = result['summary_ko']
+                processed_item['summarized'] = True
+                processed_item['tokens_used'] = result.get('tokens_used', 0)
+                successful_count += 1
+                total_tokens += result.get('tokens_used', 0)
+                print(f"성공: {item['title'][:30]}... ({result.get('tokens_used', 0)} tokens)", file=sys.stderr)
+            else:
+                processed_item['summary_ko'] = item.get('content', '')[:500] + "..."
+                processed_item['summarized'] = False
+                processed_item['summary_error'] = result['error']
+                processed_item['error_type'] = result.get('error_type', 'unknown')
+                failed_count += 1
+                print(f"실패: {item['title'][:30]}... - {result['error']}", file=sys.stderr)
+
+            processed_items.append(processed_item)
+
+            if i < total_items - 1:
+                time.sleep(0.5)
 
     return {
         "success": successful_count > 0,
@@ -235,7 +419,8 @@ def process_news_items(items: List[Dict]) -> Dict[str, any]:
             "successfully_summarized": successful_count,
             "summary_failed": failed_count,
             "total_tokens_used": total_tokens,
-            "avg_processing_time": "N/A"  # 실제로는 시간 측정 가능
+            "batch_mode": use_batch,
+            "batch_size": batch_size if use_batch else 1
         }
     }
 

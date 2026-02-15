@@ -108,9 +108,12 @@ class DatabaseClient:
             return {"success": True, "inserted": 0, "skipped_duplicates": 0, "inserted_ids": []}
 
         insert_query = """
-        INSERT INTO news_items (title, category, source, url, published_at, original_content, summary_ko, is_duplicate)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (url) DO NOTHING
+        INSERT INTO news_items (title, category, source, url, published_at, summary, summary_ko)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (url) DO UPDATE SET
+            summary_ko = EXCLUDED.summary_ko,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE news_items.summary_ko LIKE '[요약 불가%'
         RETURNING id;
         """
 
@@ -139,8 +142,7 @@ class DatabaseClient:
                             item['url'],
                             published_at,
                             item.get('content', ''),
-                            item.get('summary_ko', ''),
-                            item.get('is_duplicate', False)
+                            item.get('summary_ko', '')
                         ))
 
                         if cursor.rowcount > 0:
@@ -176,30 +178,47 @@ class DatabaseClient:
                 "error": str(e)
             }
 
-    def insert_newsletter(self, content: str, recipient_count: int) -> Dict[str, any]:
-        """뉴스레터 발행 기록을 newsletters 테이블에 저장"""
+    def insert_newsletter(self, content: str, recipient_count: int, news_item_ids: List[int] = None) -> Dict[str, any]:
+        """뉴스레터 발행 기록을 newsletters 테이블에 저장하고 뉴스 항목 연결"""
         insert_query = """
-        INSERT INTO newsletters (issue_date, content, sent_at, recipient_count)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO newsletters (subject, html_content, sent_at, recipient_count, status)
+        VALUES (%s, %s, %s, %s, %s)
         RETURNING id;
+        """
+
+        link_query = """
+        INSERT INTO newsletter_items (newsletter_id, news_item_id)
+        VALUES (%s, %s)
+        ON CONFLICT (newsletter_id, news_item_id) DO NOTHING;
         """
 
         try:
             result = self.execute_query(insert_query, (
-                date.today(),
+                f"AI News Digest - {date.today()}",
                 content,
                 datetime.now(),
-                recipient_count
+                recipient_count,
+                'sent'
             ), fetch="one")
 
             if result["success"] and result["result"]:
                 newsletter_id = result["result"]["id"]
+
+                # 뉴스 항목 연결
+                linked_count = 0
+                if news_item_ids:
+                    for item_id in news_item_ids:
+                        link_result = self.execute_query(link_query, (newsletter_id, item_id))
+                        if link_result["success"]:
+                            linked_count += 1
+
                 return {
                     "success": True,
                     "operation": "insert_newsletter",
                     "newsletter_id": newsletter_id,
                     "issue_date": str(date.today()),
-                    "recipient_count": recipient_count
+                    "recipient_count": recipient_count,
+                    "linked_news_items": linked_count
                 }
             else:
                 return {
@@ -256,12 +275,20 @@ class DatabaseClient:
             }
 
     def get_today_news(self) -> Dict[str, any]:
-        """오늘 수집된 뉴스 목록 조회"""
+        """오늘 수집된 뉴스 중 아직 발송되지 않은 목록 조회"""
         query = """
-        SELECT id, title, category, source, url, published_at, summary_ko, is_duplicate
-        FROM news_items
-        WHERE DATE(collected_at) = CURRENT_DATE
-        ORDER BY published_at DESC;
+        SELECT DISTINCT n.id, n.title, n.category, n.source, n.url,
+               n.published_at, n.summary, n.summary_ko
+        FROM news_items n
+        WHERE DATE(n.collected_at) = CURRENT_DATE
+          AND NOT EXISTS (
+              SELECT 1 FROM newsletter_items ni
+              JOIN newsletters nl ON ni.newsletter_id = nl.id
+              WHERE ni.news_item_id = n.id
+                AND nl.sent_at IS NOT NULL
+                AND DATE(nl.sent_at) = CURRENT_DATE
+          )
+        ORDER BY n.published_at DESC;
         """
 
         try:
