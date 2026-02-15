@@ -1,0 +1,15 @@
+tools:
+  - name: duplicate_checker
+    description: "뉴스 제목 유사도 계산 및 중복 제거"
+    input: { 뉴스항목목록, 유사도임계값 }
+    output: { 중복제거후항목목록, 중복통계 }
+
+  - name: groq_summarizer
+    description: "Groq API를 통한 원문 요약 및 한국어 번역"
+    input: { 원문내용, 모델명 }
+    output: { 한국어요약, 처리성공여부 }
+
+  - name: file_read
+    description: "API 키 설정 파일 읽기"
+    input: { 파일경로 }
+    output: { 파일내용 }

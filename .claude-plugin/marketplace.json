@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ai-news-digest",
+  "owner": {
+    "name": "유니콘주식회사",
+    "email": "dev@unicorn-inc.com"
+  },
+  "plugins": [
+    {
+      "name": "ai-news-digest",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+tools:
+  - name: db_client
+    description: "PostgreSQL 데이터베이스 CRUD 연산"
+    input: { 연산유형, 테이블명, 데이터 }
+    output: { 연산결과, 영향받은행수, 생성된ID }
+
+  - name: file_read
+    description: "데이터베이스 설정 파일 읽기"
+    input: { 파일경로 }
+    output: { 파일내용 }

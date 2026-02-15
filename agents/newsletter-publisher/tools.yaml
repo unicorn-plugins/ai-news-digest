@@ -1,0 +1,20 @@
+tools:
+  - name: newsletter_generator
+    description: "Jinja2 템플릿 기반 HTML 뉴스레터 생성"
+    input: { 뉴스항목목록, 템플릿경로, 발행날짜 }
+    output: { HTML콘텐츠, 뉴스레터크기 }
+
+  - name: email_sender
+    description: "Gmail SMTP를 통한 이메일 발송"
+    input: { 수신자목록, 제목, HTML본문, SMTP설정 }
+    output: { 발송결과, 성공수, 실패수, 실패주소목록 }
+
+  - name: file_read
+    description: "수신자 목록 및 SMTP 설정 파일 읽기"
+    input: { 파일경로 }
+    output: { 파일내용 }
+
+  - name: file_write
+    description: "뉴스레터 HTML 파일 저장 (선택적)"
+    input: { 파일경로, HTML내용 }
+    output: { 저장완료여부 }

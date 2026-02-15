@@ -1,0 +1,12 @@
+{
+  "name": "ai-news-digest",
+  "version": "1.0.0",
+  "description": "AI 관련 최신 뉴스를 자동 수집·요약하여 한국어 뉴스레터로 발행하는 DMAP 플러그인",
+  "author": {
+    "name": "유니콘주식회사"
+  },
+  "repository": "https://github.com/unicorn-plugins/ai-news-digest",
+  "homepage": "https://github.com/unicorn-plugins/ai-news-digest",
+  "license": "MIT",
+  "keywords": ["ai", "news", "newsletter", "automation", "dmap", "plugin", "multi-agent"]
+}

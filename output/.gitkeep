@@ -1,0 +1,5 @@
+# Output Directory
+
+이 디렉토리에는 AI News Digest에서 생성된 뉴스레터 HTML 파일들이 저장됩니다.
+
+파일 형식: `ai-news-digest-YYYYMMDD.html`

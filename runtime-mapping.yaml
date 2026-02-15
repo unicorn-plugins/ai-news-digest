@@ -1,0 +1,32 @@
+# Tier 매핑
+tiers:
+  HEAVY:
+    model: claude-opus-4-6
+  HIGH:
+    model: claude-opus-4-6
+  MEDIUM:
+    model: claude-sonnet-4-6
+  LOW:
+    model: claude-haiku-4
+
+# 추상 도구 매핑
+tools:
+  CustomApp(rss_collector):
+    - Bash  # python tools/customs/apps/rss_collector.py
+  CustomApp(groq_summarizer):
+    - Bash  # python tools/customs/apps/groq_summarizer.py
+  CustomApp(duplicate_checker):
+    - Bash  # python tools/customs/apps/duplicate_checker.py
+  CustomApp(db_client):
+    - Bash  # python tools/customs/apps/db_client.py
+  CustomApp(newsletter_generator):
+    - Bash  # python tools/customs/apps/newsletter_generator.py
+  CustomCLI(email_sender):
+    - Bash  # python tools/customs/apps/email_sender.py
+
+# 금지 액션 매핑
+forbidden_actions:
+  file_write:
+    - Write
+    - Edit
+    - MultiEdit

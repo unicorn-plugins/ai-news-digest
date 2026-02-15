@@ -1,0 +1,10 @@
+tools:
+  - name: rss_feed_collector
+    description: "RSS 피드 수집 및 파싱"
+    input: { 피드URL목록, 시간필터 }
+    output: { 뉴스항목목록, 수집통계, 실패피드목록 }
+
+  - name: file_read
+    description: "설정 파일 읽기"
+    input: { 파일경로 }
+    output: { 파일내용 }

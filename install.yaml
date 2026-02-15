@@ -1,0 +1,3 @@
+# Gateway 설치 설정 (MCP/LSP 서버 없음)
+mcpServers: {}
+lspServers: {}
